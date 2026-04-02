@@ -1,194 +1,314 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>Phenomenon Causal Graph</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phenomenon Graph Workbench</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: sans-serif; background: #1e1e2e; color: #cdd6f4; }
-
-    #toolbar {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 16px; background: #181825; border-bottom: 1px solid #313244;
+    body { font-family: Inter, system-ui, sans-serif; background: #101321; color: #d9e1ff; }
+    .layout { display: grid; grid-template-columns: 380px 1fr; height: 100vh; }
+    .panel { padding: 14px; border-right: 1px solid #2a3350; background: #151a2f; overflow-y: auto; }
+    .panel h1 { font-size: 18px; margin-bottom: 12px; }
+    .card { background: #1b2340; border: 1px solid #2f3a63; border-radius: 10px; padding: 10px; margin-bottom: 12px; }
+    .card h2 { font-size: 14px; margin-bottom: 8px; }
+    textarea, input[type="text"], input[type="password"], input[type="url"] {
+      width: 100%; background: #0f1630; border: 1px solid #344373; color: #d9e1ff;
+      border-radius: 8px; padding: 8px; font-size: 13px;
     }
-    #toolbar h1 { font-size: 1rem; font-weight: 600; flex: 1; }
-    #file-input { color: #cdd6f4; }
-
-    #legend {
-      display: flex; gap: 16px; font-size: 0.78rem;
+    textarea { min-height: 120px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    button {
+      background: #4e6bff; border: none; color: white; font-weight: 600;
+      border-radius: 8px; padding: 8px 10px; cursor: pointer;
     }
-    .legend-item { display: flex; align-items: center; gap: 6px; }
-    .legend-dot {
-      width: 12px; height: 12px; border-radius: 50%;
-      border: 2px solid rgba(255,255,255,.3);
+    button.secondary { background: #3a456f; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .small { font-size: 12px; opacity: .85; }
+    .graph-list { display: flex; flex-direction: column; gap: 6px; }
+    .graph-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .main { position: relative; }
+    #container { width: 100%; height: 100%; }
+    #thinking {
+      position: absolute; right: 10px; top: 10px; width: 420px; max-height: 52vh;
+      background: rgba(10, 16, 31, .95); border: 1px solid #2f3a63; border-radius: 10px;
+      padding: 8px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;
     }
-
-    #container { width: 100vw; height: calc(100vh - 50px); }
-
-    svg { width: 100%; height: 100%; }
-
-    .link {
-      stroke-opacity: 0.7;
-      fill: none;
-    }
-    .link.causes   { stroke: #f38ba8; }
-    .link.triggers { stroke: #89b4fa; }
-    .link-cooccurs { stroke: #a6e3a1; stroke-dasharray: 6 3; }
-
-    .node circle {
-      stroke: rgba(255,255,255,.25);
-      stroke-width: 1.5px;
-      cursor: pointer;
-    }
-    .node.symptom     circle { fill: #f38ba8; }
-    .node.intermediate circle { fill: #89b4fa; }
-    .node.root_cause   circle { fill: #a6e3a1; }
-    .node.verified circle { stroke: #f9e2af; stroke-width: 2.5px; }
-
-    .node text {
-      font-size: 11px; fill: #cdd6f4;
-      pointer-events: none;
-      text-shadow: 0 0 4px #1e1e2e;
-    }
-
     #tooltip {
-      position: fixed; pointer-events: none;
-      background: #313244; border: 1px solid #45475a;
-      border-radius: 6px; padding: 8px 12px;
-      font-size: 12px; max-width: 260px;
-      display: none;
+      position: fixed; pointer-events: none; display: none; font-size: 12px;
+      background: #1f2849; border: 1px solid #3a4b80; border-radius: 8px; padding: 8px;
+      max-width: 320px;
     }
+    .legend { display: flex; gap: 10px; margin-top: 8px; font-size: 11px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .node circle { stroke: rgba(255,255,255,.22); stroke-width: 1.5px; }
+    .node.symptom circle { fill: #ff859b; }
+    .node.intermediate circle { fill: #7da2ff; }
+    .node.root_cause circle { fill: #8dd39e; }
+    .node.verified circle { stroke: #ffd277; stroke-width: 3px; }
+    .node text { fill: #d9e1ff; font-size: 11px; pointer-events: none; text-shadow: 0 0 4px #101321; }
+    .link { fill: none; stroke-opacity: .7; }
+    .link.causes { stroke: #ff859b; }
+    .link.triggers { stroke: #7da2ff; }
+    .link.co-occurs { stroke: #8dd39e; stroke-dasharray: 5 4; }
   </style>
 </head>
 <body>
-<div id="toolbar">
-  <h1>Phenomenon Causal Graph</h1>
-  <input type="file" id="file-input" accept=".json" />
-  <div id="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:#f38ba8"></div>symptom</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#89b4fa"></div>intermediate</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#a6e3a1"></div>root_cause</div>
-  </div>
-</div>
-<div id="container"></div>
-<div id="tooltip"></div>
+<div class="layout">
+  <aside class="panel">
+    <h1>Phenomenon Graph Workbench</h1>
 
+    <div class="card">
+      <h2>LLM 配置</h2>
+      <input id="model" type="text" placeholder="model (e.g. gpt-4o-mini)" />
+      <div class="row">
+        <input id="baseUrl" type="url" placeholder="base_url" />
+        <input id="apiKey" type="password" placeholder="api_key" />
+      </div>
+      <p class="small" style="margin-top:6px;">留空则走服务端 config.yaml / 环境变量。</p>
+    </div>
+
+    <div class="card">
+      <h2>文本抽取</h2>
+      <textarea id="textInput" placeholder="粘贴待抽取文本..."></textarea>
+      <div class="row">
+        <button id="extractBtn">抽取</button>
+        <button id="streamBtn" class="secondary">流式抽取 + 思考</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>上传文本文件</h2>
+      <input id="fileInput" type="file" accept=".txt" />
+      <button id="uploadExtractBtn" style="margin-top:8px;width:100%;">上传并抽取</button>
+    </div>
+
+    <div class="card">
+      <h2>已有抽取结果（可选中 Merge）</h2>
+      <div id="graphList" class="graph-list"></div>
+      <button id="mergeBtn" class="secondary" style="margin-top:8px;width:100%;">合并选中图</button>
+      <pre id="mergeSummary" class="small" style="margin-top:8px;white-space:pre-wrap"></pre>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot" style="background:#ff859b"></i>symptom</span>
+      <span><i class="dot" style="background:#7da2ff"></i>intermediate</span>
+      <span><i class="dot" style="background:#8dd39e"></i>root_cause</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="container"></div>
+    <pre id="thinking">流式思考输出会显示在这里。</pre>
+  </main>
+</div>
+
+<div id="tooltip"></div>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 const tooltip = document.getElementById('tooltip');
+const thinking = document.getElementById('thinking');
+
+function getCfg() {
+  return {
+    model: document.getElementById('model').value.trim(),
+    base_url: document.getElementById('baseUrl').value.trim(),
+    api_key: document.getElementById('apiKey').value.trim(),
+  };
+}
+
+function appendThinking(text) {
+  thinking.textContent += text;
+  thinking.scrollTop = thinking.scrollHeight;
+}
+
+function resetThinking() {
+  thinking.textContent = '';
+}
+
+async function refreshGraphs() {
+  const r = await fetch('/api/graphs');
+  const data = await r.json();
+  const list = document.getElementById('graphList');
+  list.innerHTML = '';
+  data.graphs.forEach(g => {
+    const row = document.createElement('label');
+    row.className = 'graph-item';
+    row.innerHTML = `<input type="checkbox" value="${g.graph_id}" /> <span>${g.graph_id}: ${g.symptom} (${g.node_count}N/${g.edge_count}E)</span>`;
+    row.addEventListener('dblclick', async () => {
+      const checked = [g.graph_id];
+      await mergeGraphs(checked, false);
+    });
+    list.appendChild(row);
+  });
+}
+
+function buildFormData(withText) {
+  const cfg = getCfg();
+  const fd = new FormData();
+  if (withText) {
+    fd.append('text', document.getElementById('textInput').value);
+    fd.append('source_name', 'manual-input');
+  }
+  if (cfg.model) fd.append('model', cfg.model);
+  if (cfg.base_url) fd.append('base_url', cfg.base_url);
+  if (cfg.api_key) fd.append('api_key', cfg.api_key);
+  return fd;
+}
+
+async function runExtract() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return alert('请输入文本');
+  const resp = await fetch('/api/extract', { method: 'POST', body: buildFormData(true) });
+  const data = await resp.json();
+  if (!resp.ok) return alert(data.detail || '抽取失败');
+  renderGraph(data.graph);
+  await refreshGraphs();
+}
+
+async function runStreamExtract() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return alert('请输入文本');
+  resetThinking();
+
+  const resp = await fetch('/api/extract-stream', { method: 'POST', body: buildFormData(true) });
+  if (!resp.ok) {
+    const err = await resp.text();
+    return alert(err);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() || '';
+
+    for (const part of parts) {
+      if (!part.startsWith('data: ')) continue;
+      const payload = JSON.parse(part.slice(6));
+      if (payload.type === 'thinking') {
+        appendThinking(payload.delta);
+      } else if (payload.type === 'result') {
+        appendThinking('\n\n[完成] 已获得结构化结果。');
+        renderGraph(payload.graph);
+        await refreshGraphs();
+      } else if (payload.type === 'error') {
+        appendThinking(`\n\n[ERROR] ${payload.message}`);
+      }
+    }
+  }
+}
+
+async function runUploadExtract() {
+  const file = document.getElementById('fileInput').files[0];
+  if (!file) return alert('请先选择文件');
+  const fd = buildFormData(false);
+  fd.append('file', file);
+  const resp = await fetch('/api/extract-file', { method: 'POST', body: fd });
+  const data = await resp.json();
+  if (!resp.ok) return alert(data.detail || '上传抽取失败');
+  renderGraph(data.graph);
+  await refreshGraphs();
+}
+
+async function mergeGraphs(ids = null, fromButton = true) {
+  const selected = ids || [...document.querySelectorAll('#graphList input:checked')].map(i => i.value);
+  if (!selected.length) {
+    if (fromButton) alert('请至少选择一个图');
+    return;
+  }
+  const resp = await fetch('/api/merge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(selected),
+  });
+  const data = await resp.json();
+  if (!resp.ok) return alert(data.detail || '合并失败');
+  renderGraph(data.graph);
+  document.getElementById('mergeSummary').textContent = data.summary;
+}
 
 function renderGraph(data) {
   d3.select('#container').selectAll('*').remove();
-
-  const width  = document.getElementById('container').clientWidth;
+  const width = document.getElementById('container').clientWidth;
   const height = document.getElementById('container').clientHeight;
 
-  const nodes = data.nodes.map(d => ({ ...d }));
-  const edges = data.edges.map(d => ({ ...d }));
+  const nodes = (data.nodes || []).map(d => ({ ...d }));
+  const edges = (data.edges || []).map(d => ({ ...d }));
+  if (!nodes.length) return;
 
-  const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const links = edges.map(e => ({ ...e, source: byId[e.from_id] || e.from_id, target: byId[e.to_id] || e.to_id }));
+  const maxW = Math.max(1, ...edges.map(e => e.weight || 1));
 
-  const links = edges.map(e => ({
-    ...e,
-    source: nodeById[e.from_id] || e.from_id,
-    target: nodeById[e.to_id]   || e.to_id,
-  }));
-
-  const maxWeight = Math.max(1, ...edges.map(e => e.weight || 1));
-
-  const svg = d3.select('#container').append('svg');
-
-  // Arrow markers
+  const svg = d3.select('#container').append('svg').attr('width', width).attr('height', height);
   const defs = svg.append('defs');
   ['causes', 'triggers', 'co-occurs'].forEach(rel => {
-    defs.append('marker')
-      .attr('id', `arrow-${rel}`)
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 22).attr('refY', 0)
-      .attr('markerWidth', 6).attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', rel === 'causes' ? '#f38ba8' : rel === 'triggers' ? '#89b4fa' : '#a6e3a1');
+    defs.append('marker').attr('id', `arrow-${rel}`).attr('viewBox', '0 -5 10 10').attr('refX', 22).attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', rel === 'causes' ? '#ff859b' : rel === 'triggers' ? '#7da2ff' : '#8dd39e');
   });
 
   const g = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.2, 5]).on('zoom', e => g.attr('transform', e.transform)));
 
-  svg.call(
-    d3.zoom().scaleExtent([0.2, 4])
-      .on('zoom', e => g.attr('transform', e.transform))
-  );
-
-  const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(160))
-    .force('charge', d3.forceManyBody().strength(-400))
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(150))
+    .force('charge', d3.forceManyBody().strength(-460))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide(40));
+    .force('collision', d3.forceCollide(42));
 
-  const link = g.append('g').selectAll('path')
-    .data(links).enter().append('path')
+  const link = g.append('g').selectAll('path').data(links).enter().append('path')
     .attr('class', d => `link ${d.relation}`)
-    .attr('stroke-width', d => 1 + (d.weight / maxWeight) * 4)
+    .attr('stroke-width', d => 1 + (d.weight / maxW) * 4)
     .attr('marker-end', d => `url(#arrow-${d.relation})`)
-    .on('mouseover', (e, d) => {
+    .on('mousemove', (e, d) => {
       tooltip.style.display = 'block';
-      tooltip.innerHTML = `<b>${d.relation}</b>${d.label ? `<br>${d.label}` : ''}<br>weight: ${d.weight || 1}`;
-    })
-    .on('mousemove', e => {
-      tooltip.style.left = (e.clientX + 14) + 'px';
-      tooltip.style.top  = (e.clientY - 10) + 'px';
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 8) + 'px';
+      tooltip.innerHTML = `<b>${d.relation}</b><br>weight: ${d.weight || 1}`;
     })
     .on('mouseout', () => tooltip.style.display = 'none');
 
-  const node = g.append('g').selectAll('g')
-    .data(nodes).enter().append('g')
+  const node = g.append('g').selectAll('g').data(nodes).enter().append('g')
     .attr('class', d => `node ${d.type}${d.verified ? ' verified' : ''}`)
-    .call(
-      d3.drag()
-        .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-        .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
-        .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
-    )
-    .on('mouseover', (e, d) => {
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on('mousemove', (e, d) => {
       tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 8) + 'px';
       tooltip.innerHTML = `<b>${d.label}</b><br>type: ${d.type}<br>verified: ${d.verified}`;
-    })
-    .on('mousemove', e => {
-      tooltip.style.left = (e.clientX + 14) + 'px';
-      tooltip.style.top  = (e.clientY - 10) + 'px';
     })
     .on('mouseout', () => tooltip.style.display = 'none');
 
   node.append('circle').attr('r', 18);
-  node.append('text')
-    .attr('dy', 30)
-    .attr('text-anchor', 'middle')
-    .text(d => d.label.length > 30 ? d.label.slice(0, 28) + '…' : d.label);
+  node.append('text').attr('dy', 30).attr('text-anchor', 'middle').text(d => d.label.length > 24 ? d.label.slice(0, 22) + '…' : d.label);
 
-  simulation.on('tick', () => {
+  sim.on('tick', () => {
     link.attr('d', d => {
       const dx = d.target.x - d.source.x;
       const dy = d.target.y - d.source.y;
-      const dr = Math.sqrt(dx * dx + dy * dy) * 1.5;
+      const dr = Math.sqrt(dx * dx + dy * dy) * 1.2;
       return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
     });
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
 }
 
-document.getElementById('file-input').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = evt => {
-    try {
-      renderGraph(JSON.parse(evt.target.result));
-    } catch (err) {
-      alert('Failed to parse JSON: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-});
+
+document.getElementById('extractBtn').addEventListener('click', runExtract);
+document.getElementById('streamBtn').addEventListener('click', runStreamExtract);
+document.getElementById('uploadExtractBtn').addEventListener('click', runUploadExtract);
+document.getElementById('mergeBtn').addEventListener('click', () => mergeGraphs());
+refreshGraphs();
 </script>
 </body>
 </html>
