@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Phenomenon Causal Graph</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #1e1e2e; color: #cdd6f4; }
+
+    #toolbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; background: #181825; border-bottom: 1px solid #313244;
+    }
+    #toolbar h1 { font-size: 1rem; font-weight: 600; flex: 1; }
+    #file-input { color: #cdd6f4; }
+
+    #legend {
+      display: flex; gap: 16px; font-size: 0.78rem;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.3);
+    }
+
+    #container { width: 100vw; height: calc(100vh - 50px); }
+
+    svg { width: 100%; height: 100%; }
+
+    .link {
+      stroke-opacity: 0.7;
+      fill: none;
+    }
+    .link.causes   { stroke: #f38ba8; }
+    .link.triggers { stroke: #89b4fa; }
+    .link-cooccurs { stroke: #a6e3a1; stroke-dasharray: 6 3; }
+
+    .node circle {
+      stroke: rgba(255,255,255,.25);
+      stroke-width: 1.5px;
+      cursor: pointer;
+    }
+    .node.symptom     circle { fill: #f38ba8; }
+    .node.intermediate circle { fill: #89b4fa; }
+    .node.root_cause   circle { fill: #a6e3a1; }
+    .node.verified circle { stroke: #f9e2af; stroke-width: 2.5px; }
+
+    .node text {
+      font-size: 11px; fill: #cdd6f4;
+      pointer-events: none;
+      text-shadow: 0 0 4px #1e1e2e;
+    }
+
+    #tooltip {
+      position: fixed; pointer-events: none;
+      background: #313244; border: 1px solid #45475a;
+      border-radius: 6px; padding: 8px 12px;
+      font-size: 12px; max-width: 260px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<div id="toolbar">
+  <h1>Phenomenon Causal Graph</h1>
+  <input type="file" id="file-input" accept=".json" />
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#f38ba8"></div>symptom</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#89b4fa"></div>intermediate</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a6e3a1"></div>root_cause</div>
+  </div>
+</div>
+<div id="container"></div>
+<div id="tooltip"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const tooltip = document.getElementById('tooltip');
+
+function renderGraph(data) {
+  d3.select('#container').selectAll('*').remove();
+
+  const width  = document.getElementById('container').clientWidth;
+  const height = document.getElementById('container').clientHeight;
+
+  const nodes = data.nodes.map(d => ({ ...d }));
+  const edges = data.edges.map(d => ({ ...d }));
+
+  const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+  const links = edges.map(e => ({
+    ...e,
+    source: nodeById[e.from_id] || e.from_id,
+    target: nodeById[e.to_id]   || e.to_id,
+  }));
+
+  const maxWeight = Math.max(1, ...edges.map(e => e.weight || 1));
+
+  const svg = d3.select('#container').append('svg');
+
+  // Arrow markers
+  const defs = svg.append('defs');
+  ['causes', 'triggers', 'co-occurs'].forEach(rel => {
+    defs.append('marker')
+      .attr('id', `arrow-${rel}`)
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 22).attr('refY', 0)
+      .attr('markerWidth', 6).attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', rel === 'causes' ? '#f38ba8' : rel === 'triggers' ? '#89b4fa' : '#a6e3a1');
+  });
+
+  const g = svg.append('g');
+
+  svg.call(
+    d3.zoom().scaleExtent([0.2, 4])
+      .on('zoom', e => g.attr('transform', e.transform))
+  );
+
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(160))
+    .force('charge', d3.forceManyBody().strength(-400))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide(40));
+
+  const link = g.append('g').selectAll('path')
+    .data(links).enter().append('path')
+    .attr('class', d => `link ${d.relation}`)
+    .attr('stroke-width', d => 1 + (d.weight / maxWeight) * 4)
+    .attr('marker-end', d => `url(#arrow-${d.relation})`)
+    .on('mouseover', (e, d) => {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `<b>${d.relation}</b>${d.label ? `<br>${d.label}` : ''}<br>weight: ${d.weight || 1}`;
+    })
+    .on('mousemove', e => {
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top  = (e.clientY - 10) + 'px';
+    })
+    .on('mouseout', () => tooltip.style.display = 'none');
+
+  const node = g.append('g').selectAll('g')
+    .data(nodes).enter().append('g')
+    .attr('class', d => `node ${d.type}${d.verified ? ' verified' : ''}`)
+    .call(
+      d3.drag()
+        .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
+        .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+    )
+    .on('mouseover', (e, d) => {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `<b>${d.label}</b><br>type: ${d.type}<br>verified: ${d.verified}`;
+    })
+    .on('mousemove', e => {
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top  = (e.clientY - 10) + 'px';
+    })
+    .on('mouseout', () => tooltip.style.display = 'none');
+
+  node.append('circle').attr('r', 18);
+  node.append('text')
+    .attr('dy', 30)
+    .attr('text-anchor', 'middle')
+    .text(d => d.label.length > 30 ? d.label.slice(0, 28) + '…' : d.label);
+
+  simulation.on('tick', () => {
+    link.attr('d', d => {
+      const dx = d.target.x - d.source.x;
+      const dy = d.target.y - d.source.y;
+      const dr = Math.sqrt(dx * dx + dy * dy) * 1.5;
+      return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+    });
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      renderGraph(JSON.parse(evt.target.result));
+    } catch (err) {
+      alert('Failed to parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>
