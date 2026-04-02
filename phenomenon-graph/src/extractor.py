@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from .prompt import SYSTEM_PROMPT, build_user_prompt
 from .schema import PhenomenonGraph
@@ -56,6 +56,42 @@ class Extractor:
             f"Extraction failed after {self.max_retries} attempts. "
             f"Last error: {last_error}"
         ) from last_error
+
+    async def extract_stream(
+        self, text: str, source_file: Optional[str] = None
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream extraction: yields thinking chunks, then the final graph or an error."""
+        user_prompt = build_user_prompt(text)
+        full_content = ""
+
+        async_client = AsyncOpenAI(
+            base_url=self.config.base_url,
+            api_key=self.config.api_key,
+            default_headers=self.config.extra_headers if self.config.extra_headers else None,
+        )
+
+        stream = await async_client.chat.completions.create(
+            model=self.config.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0,
+            stream=True,
+        )
+
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                delta = chunk.choices[0].delta.content
+                full_content += delta
+                yield {"type": "thinking", "content": delta}
+
+        try:
+            graph = self._parse_response(full_content)
+            graph.source_file = source_file
+            yield {"type": "graph", "data": graph.model_dump(mode="json")}
+        except Exception as exc:
+            yield {"type": "error", "message": str(exc)}
 
     # ------------------------------------------------------------------
     # Private helpers
