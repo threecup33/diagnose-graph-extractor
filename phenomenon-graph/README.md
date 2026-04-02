@@ -115,6 +115,37 @@ python -m src.cli merge \
 
 ---
 
+## Front-end + API Service (文本抽取 / 上传抽取 / 结果合并 / 流式输出)
+
+启动统一服务（前后端一体）：
+
+```bash
+cd phenomenon-graph
+uvicorn src.server:app --host 0.0.0.0 --port 8000
+```
+
+然后通过局域网 IP 访问：
+
+- 本机: `http://127.0.0.1:8000`
+- 其他机器: `http://<你的服务器IP>:8000`
+
+新前端能力：
+
+- 输入文本并直接抽取现象图。
+- 上传 `.txt` 文件并抽取。
+- 保存本次会话中的每个抽取结果，并可多选后执行 merge。
+- 支持流式展示模型输出（作为“思考流”观察窗口），并在结束后自动结构化为图。
+
+主要 API：
+
+- `POST /api/extract`：普通文本抽取。
+- `POST /api/extract-file`：上传文本文件抽取。
+- `POST /api/extract-stream`：SSE 流式输出 + 最终图。
+- `GET /api/graphs`：查看当前服务内存中已有抽取结果。
+- `POST /api/merge`：按 graph_id 列表合并。
+
+---
+
 ## Visualization
 
 Open `web/index.html` in a browser and load any `.json` file
@@ -156,12 +187,13 @@ phenomenon-graph/
 │   ├── prompt.py      # System & user prompt templates
 │   ├── extractor.py   # LLM client + JSON parsing
 │   ├── graph.py       # Multi-graph merge logic
-│   └── cli.py         # CLI (extract / batch / merge)
+│   ├── cli.py         # CLI (extract / batch / merge)
+│   └── server.py      # FastAPI service for frontend + APIs
 ├── data/
 │   ├── raw/           # Input .txt files
 │   └── graphs/        # Output .json files
 ├── web/
-│   └── index.html     # D3.js visualizer
+│   └── index.html     # D3.js visualizer + extraction workbench
 ├── config.yaml
 ├── requirements.txt
 └── README.md
