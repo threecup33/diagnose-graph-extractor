@@ -1,90 +1,727 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>Phenomenon Causal Graph</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>现象因果图分析系统</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: sans-serif; background: #1e1e2e; color: #cdd6f4; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    #toolbar {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 16px; background: #181825; border-bottom: 1px solid #313244;
-    }
-    #toolbar h1 { font-size: 1rem; font-weight: 600; flex: 1; }
-    #file-input { color: #cdd6f4; }
-
-    #legend {
-      display: flex; gap: 16px; font-size: 0.78rem;
-    }
-    .legend-item { display: flex; align-items: center; gap: 6px; }
-    .legend-dot {
-      width: 12px; height: 12px; border-radius: 50%;
-      border: 2px solid rgba(255,255,255,.3);
+    :root {
+      --bg:       #1e1e2e;
+      --surface:  #181825;
+      --surface2: #24273a;
+      --border:   #313244;
+      --text:     #cdd6f4;
+      --muted:    #6c7086;
+      --accent:   #89b4fa;
+      --green:    #a6e3a1;
+      --red:      #f38ba8;
+      --yellow:   #f9e2af;
+      --peach:    #fab387;
     }
 
-    #container { width: 100vw; height: calc(100vh - 50px); }
-
-    svg { width: 100%; height: 100%; }
-
-    .link {
-      stroke-opacity: 0.7;
-      fill: none;
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
-    .link.causes   { stroke: #f38ba8; }
-    .link.triggers { stroke: #89b4fa; }
-    .link-cooccurs { stroke: #a6e3a1; stroke-dasharray: 6 3; }
 
-    .node circle {
-      stroke: rgba(255,255,255,.25);
-      stroke-width: 1.5px;
+    /* ── Header ── */
+    #header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    #header h1 { font-size: 1rem; font-weight: 600; flex: 1; }
+
+    /* Config bar */
+    #config-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+    }
+    #config-bar input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 3px 7px;
+      width: 160px;
+      font-size: 0.78rem;
+    }
+    #config-bar input.wide { width: 230px; }
+    #config-bar label { color: var(--muted); }
+
+    /* ── Main layout ── */
+    #main {
+      display: grid;
+      grid-template-columns: 320px 220px 1fr;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Panels ── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .panel:last-child { border-right: none; }
+
+    .panel-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .panel-header .spacer { flex: 1; }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── Form elements ── */
+    label.field-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 3px;
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px;
+      font-size: 0.8rem;
+      resize: vertical;
+      font-family: inherit;
+      min-height: 130px;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); }
+
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 5px 8px;
+      font-size: 0.8rem;
+      font-family: inherit;
+    }
+    input[type="text"]:focus { outline: none; border-color: var(--accent); }
+    input[type="file"] { cursor: pointer; padding: 4px 6px; }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .row input[type="text"] { flex: 1; }
+
+    button {
+      background: var(--accent);
+      color: var(--surface);
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
       cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+      transition: opacity 0.15s;
     }
-    .node.symptom     circle { fill: #f38ba8; }
-    .node.intermediate circle { fill: #89b4fa; }
-    .node.root_cause   circle { fill: #a6e3a1; }
-    .node.verified circle { stroke: #f9e2af; stroke-width: 2.5px; }
-
-    .node text {
-      font-size: 11px; fill: #cdd6f4;
-      pointer-events: none;
-      text-shadow: 0 0 4px #1e1e2e;
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button.danger { background: var(--red); }
+    button.success { background: var(--green); }
+    button.sm {
+      padding: 3px 8px;
+      font-size: 0.72rem;
     }
 
-    #tooltip {
-      position: fixed; pointer-events: none;
-      background: #313244; border: 1px solid #45475a;
-      border-radius: 6px; padding: 8px 12px;
-      font-size: 12px; max-width: 260px;
+    /* ── Thinking output ── */
+    #thinking-output {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+      font-size: 0.72rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 120px;
+      color: #bac2de;
+      line-height: 1.55;
+    }
+
+    /* ── Status message ── */
+    #status-msg {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 4px;
       display: none;
     }
+    #status-msg.info  { background: #313244; color: var(--accent); display: block; }
+    #status-msg.ok    { background: #1e3a29; color: var(--green);  display: block; }
+    #status-msg.error { background: #3a1e1e; color: var(--red);    display: block; }
+
+    /* ── Graph list ── */
+    #graph-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .graph-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .graph-item:hover { border-color: var(--accent); }
+    .graph-item.active { border-color: var(--accent); background: #1a2033; }
+    .graph-item input[type="checkbox"] { flex-shrink: 0; margin-top: 2px; cursor: pointer; }
+    .graph-item-info { flex: 1; min-width: 0; }
+    .graph-item-name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .graph-item-meta { font-size: 0.7rem; color: var(--muted); margin-top: 1px; }
+    .graph-item-symptom {
+      font-size: 0.71rem;
+      color: #bac2de;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .graph-item-del {
+      flex-shrink: 0;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.78rem;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .graph-item-del:hover { color: var(--red); background: #3a1e1e; }
+
+    .merge-section {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Graph panel ── */
+    #panel-graph { border-right: none; }
+
+    #legend {
+      display: flex;
+      gap: 12px;
+      font-size: 0.72rem;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .dot {
+      width: 11px; height: 11px; border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,.2);
+      flex-shrink: 0;
+    }
+    .dot.symptom      { background: var(--red); }
+    .dot.intermediate { background: var(--accent); }
+    .dot.root_cause   { background: var(--green); }
+
+    #edge-legend {
+      display: flex;
+      gap: 12px;
+      font-size: 0.72rem;
+      padding: 4px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .edge-item { display: flex; align-items: center; gap: 5px; }
+    .edge-line {
+      width: 22px; height: 2px;
+    }
+    .edge-line.causes   { background: var(--red); }
+    .edge-line.triggers { background: var(--accent); }
+    .edge-line.cooccurs { background: var(--green); border-top: 2px dashed var(--green); height: 0; }
+
+    #graph-container {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    #graph-container svg { width: 100%; height: 100%; }
+
+    #graph-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      pointer-events: none;
+    }
+    #graph-placeholder .big { font-size: 2.5rem; }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #313244;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.75rem;
+      max-width: 280px;
+      display: none;
+      line-height: 1.6;
+      z-index: 9999;
+    }
+    #tooltip b { color: var(--yellow); }
+    #tooltip .tkey { color: var(--muted); }
+
+    /* D3 classes */
+    .link { stroke-opacity: 0.75; fill: none; }
+    .link.causes    { stroke: var(--red); }
+    .link.triggers  { stroke: var(--accent); }
+    .link.co-occurs { stroke: var(--green); stroke-dasharray: 6 3; }
+
+    .node circle { stroke: rgba(255,255,255,.2); stroke-width: 1.5px; cursor: pointer; }
+    .node.symptom      circle { fill: var(--red); }
+    .node.intermediate circle { fill: var(--accent); }
+    .node.root_cause   circle { fill: var(--green); }
+    .node.verified     circle { stroke: var(--yellow); stroke-width: 2.5px; }
+    .node text {
+      font-size: 11px;
+      fill: var(--text);
+      pointer-events: none;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   </style>
 </head>
 <body>
-<div id="toolbar">
-  <h1>Phenomenon Causal Graph</h1>
-  <input type="file" id="file-input" accept=".json" />
-  <div id="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:#f38ba8"></div>symptom</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#89b4fa"></div>intermediate</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#a6e3a1"></div>root_cause</div>
+
+<!-- ── Header ── -->
+<div id="header">
+  <h1>现象因果图分析系统</h1>
+  <div id="config-bar">
+    <label>模型：</label>
+    <input type="text" id="cfg-model" placeholder="gpt-4o" />
+    <label>API URL：</label>
+    <input type="text" id="cfg-url" class="wide" placeholder="https://api.openai.com/v1" />
+    <label>API Key：</label>
+    <input type="text" id="cfg-key" placeholder="sk-..." style="width:140px" />
+    <button id="btn-save-cfg" class="sm">保存配置</button>
   </div>
 </div>
-<div id="container"></div>
+
+<!-- ── Main ── -->
+<div id="main">
+
+  <!-- ── 左面板：输入与抽取 ── -->
+  <div class="panel" id="panel-input">
+    <div class="panel-header">文本输入与抽取</div>
+    <div class="panel-body">
+
+      <div>
+        <label class="field-label">诊断帖子内容</label>
+        <textarea id="text-input" placeholder="将诊断帖子内容粘贴到此处…"></textarea>
+      </div>
+
+      <div>
+        <label class="field-label">或上传 .txt 文件</label>
+        <input type="file" id="file-upload" accept=".txt" />
+      </div>
+
+      <div class="row">
+        <input type="text" id="graph-name" placeholder="图谱名称（可选，默认时间戳）" />
+        <button id="btn-extract">开始抽取</button>
+      </div>
+
+      <div id="status-msg"></div>
+
+      <div style="display:flex;flex-direction:column;flex:1;min-height:0;gap:4px;">
+        <label class="field-label">LLM 实时输出（流式思考过程）</label>
+        <div id="thinking-output"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 中面板：图谱管理 ── -->
+  <div class="panel" id="panel-list">
+    <div class="panel-header">
+      图谱管理
+      <span class="spacer"></span>
+      <button id="btn-refresh" class="sm">刷新</button>
+    </div>
+    <div class="panel-body">
+
+      <div id="graph-list"></div>
+
+      <div class="merge-section">
+        <label class="field-label">合并选中图谱</label>
+        <input type="text" id="merge-name" value="merged_graph" placeholder="合并结果名称" />
+        <button id="btn-merge" class="success">合并选中</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 右面板：可视化 ── -->
+  <div class="panel" id="panel-graph">
+    <div class="panel-header">
+      <span id="graph-title">图谱可视化</span>
+      <span class="spacer"></span>
+      <div id="legend">
+        <div class="legend-item"><div class="dot symptom"></div>症状</div>
+        <div class="legend-item"><div class="dot intermediate"></div>中间现象</div>
+        <div class="legend-item"><div class="dot root_cause"></div>根本原因</div>
+      </div>
+    </div>
+    <div id="edge-legend">
+      <div class="edge-item"><div class="edge-line causes"></div>导致</div>
+      <div class="edge-item"><div class="edge-line triggers"></div>触发</div>
+      <div class="edge-item"><div class="edge-line cooccurs"></div>共现</div>
+      <span style="color:var(--muted);font-size:0.7rem;margin-left:8px;">金色边框 = 已验证</span>
+    </div>
+    <div id="graph-container">
+      <div id="graph-placeholder">
+        <div class="big">🗺</div>
+        <div>抽取或选择一个图谱后在此处显示</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <div id="tooltip"></div>
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
-const tooltip = document.getElementById('tooltip');
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────────────────────
 
-function renderGraph(data) {
-  d3.select('#container').selectAll('*').remove();
+const $ = id => document.getElementById(id);
 
-  const width  = document.getElementById('container').clientWidth;
-  const height = document.getElementById('container').clientHeight;
+function setStatus(msg, type = 'info') {
+  const el = $('status-msg');
+  el.textContent = msg;
+  el.className = type;
+}
+
+function clearStatus() {
+  const el = $('status-msg');
+  el.textContent = '';
+  el.className = '';
+  el.style.display = 'none';
+}
+
+const typeLabels = { symptom: '症状', intermediate: '中间现象', root_cause: '根本原因' };
+const relLabels  = { causes: '导致', triggers: '触发', 'co-occurs': '共现' };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function loadConfig() {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    if (cfg.model)    $('cfg-model').value = cfg.model;
+    if (cfg.base_url) $('cfg-url').value   = cfg.base_url;
+  } catch (e) { /* ignore */ }
+}
+
+$('btn-save-cfg').addEventListener('click', async () => {
+  const payload = {};
+  const model = $('cfg-model').value.trim();
+  const url   = $('cfg-url').value.trim();
+  const key   = $('cfg-key').value.trim();
+  if (model) payload.model    = model;
+  if (url)   payload.base_url = url;
+  if (key)   payload.api_key  = key;
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    setStatus('配置已保存', 'ok');
+    setTimeout(clearStatus, 2000);
+  } catch (e) {
+    setStatus('保存配置失败: ' + e.message, 'error');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Extraction
+// ─────────────────────────────────────────────────────────────────────────────
+
+$('file-upload').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    $('text-input').value = evt.target.result;
+    if (!$('graph-name').value) {
+      $('graph-name').value = file.name.replace(/\.txt$/i, '');
+    }
+  };
+  reader.readAsText(file);
+});
+
+$('btn-extract').addEventListener('click', startExtract);
+
+async function startExtract() {
+  const text = $('text-input').value.trim();
+  if (!text) { setStatus('请先输入或上传文本内容', 'error'); return; }
+
+  const sourceName = $('graph-name').value.trim() || null;
+  const thinkEl    = $('thinking-output');
+  const btn        = $('btn-extract');
+
+  thinkEl.textContent = '';
+  btn.disabled = true;
+  setStatus('正在连接 LLM…', 'info');
+
+  try {
+    const resp = await fetch('/api/extract', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text, source_name: sourceName }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || resp.statusText);
+    }
+
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+
+    setStatus('LLM 输出中…', 'info');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();   // keep trailing incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (event.type === 'thinking') {
+          thinkEl.textContent += event.content;
+          thinkEl.scrollTop = thinkEl.scrollHeight;
+          setStatus('LLM 输出中…', 'info');
+
+        } else if (event.type === 'graph') {
+          renderGraph(event.data, sourceName || 'graph');
+          setStatus('图谱抽取成功，正在保存…', 'info');
+
+        } else if (event.type === 'saved') {
+          setStatus(`图谱已保存为「${event.name}」`, 'ok');
+          await loadGraphList();
+
+        } else if (event.type === 'error') {
+          setStatus('抽取失败: ' + event.message, 'error');
+
+        } else if (event.type === 'done') {
+          // stream finished
+        }
+      }
+    }
+  } catch (e) {
+    setStatus('请求失败: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Graph list
+// ─────────────────────────────────────────────────────────────────────────────
+
+let activeGraphName = null;
+
+async function loadGraphList() {
+  try {
+    const graphs = await fetch('/api/graphs').then(r => r.json());
+    renderGraphList(graphs);
+  } catch (e) {
+    console.error('加载图谱列表失败', e);
+  }
+}
+
+function renderGraphList(graphs) {
+  const container = $('graph-list');
+  container.innerHTML = '';
+
+  if (!graphs.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:8px 0;">暂无已抽取的图谱</div>';
+    return;
+  }
+
+  for (const g of graphs) {
+    const item = document.createElement('div');
+    item.className = 'graph-item' + (g.name === activeGraphName ? ' active' : '');
+    item.dataset.name = g.name;
+
+    item.innerHTML = `
+      <input type="checkbox" class="graph-cb" data-name="${g.name}" onclick="event.stopPropagation()" />
+      <div class="graph-item-info">
+        <div class="graph-item-name">${g.name}</div>
+        <div class="graph-item-meta">${g.node_count} 节点 · ${g.edge_count} 边</div>
+        <div class="graph-item-symptom">${g.symptom || ''}</div>
+      </div>
+      <button class="graph-item-del" title="删除" data-name="${g.name}" onclick="deleteGraph(event,'${g.name}')">✕</button>
+    `;
+
+    // Click item body → load graph
+    item.addEventListener('click', () => loadAndRenderGraph(g.name));
+    container.appendChild(item);
+  }
+}
+
+async function loadAndRenderGraph(name) {
+  try {
+    activeGraphName = name;
+    const data = await fetch(`/api/graph/${encodeURIComponent(name)}`).then(r => r.json());
+    renderGraph(data, name);
+    // Update active styling
+    document.querySelectorAll('.graph-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.name === name);
+    });
+  } catch (e) {
+    setStatus('加载图谱失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteGraph(event, name) {
+  event.stopPropagation();
+  if (!confirm(`确认删除图谱「${name}」？`)) return;
+  try {
+    await fetch(`/api/graph/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (activeGraphName === name) {
+      activeGraphName = null;
+      $('graph-container').querySelector('svg')?.remove();
+      $('graph-placeholder').style.display = 'flex';
+      $('graph-title').textContent = '图谱可视化';
+    }
+    await loadGraphList();
+  } catch (e) {
+    setStatus('删除失败: ' + e.message, 'error');
+  }
+}
+
+$('btn-refresh').addEventListener('click', loadGraphList);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Merge
+// ─────────────────────────────────────────────────────────────────────────────
+
+$('btn-merge').addEventListener('click', async () => {
+  const checked = [...document.querySelectorAll('.graph-cb:checked')].map(el => el.dataset.name);
+  if (checked.length < 2) {
+    setStatus('请至少勾选两个图谱后合并', 'error');
+    return;
+  }
+  const outputName = $('merge-name').value.trim() || 'merged_graph';
+  setStatus('正在合并图谱…', 'info');
+  try {
+    const result = await fetch('/api/merge', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ graph_names: checked, output_name: outputName }),
+    }).then(r => r.json());
+
+    if (result.detail) throw new Error(result.detail);
+
+    renderGraph(result, result.name || outputName);
+    activeGraphName = result.name || outputName;
+    setStatus(`合并完成，已保存为「${result.name || outputName}」`, 'ok');
+    await loadGraphList();
+  } catch (e) {
+    setStatus('合并失败: ' + e.message, 'error');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D3 Graph Rendering
+// ─────────────────────────────────────────────────────────────────────────────
+
+const tooltip = $('tooltip');
+
+function renderGraph(data, title) {
+  // Show container, hide placeholder
+  const container = $('graph-container');
+  $('graph-placeholder').style.display = 'none';
+  $('graph-title').textContent = title || '图谱可视化';
+
+  d3.select('#graph-container').selectAll('svg').remove();
+
+  const width  = container.clientWidth;
+  const height = container.clientHeight;
 
   const nodes = data.nodes.map(d => ({ ...d }));
-  const edges = data.edges.map(d => ({ ...d }));
+  const edges = (data.edges || []).map(d => ({ ...d }));
 
   const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
 
@@ -96,43 +733,46 @@ function renderGraph(data) {
 
   const maxWeight = Math.max(1, ...edges.map(e => e.weight || 1));
 
-  const svg = d3.select('#container').append('svg');
+  const svg = d3.select('#graph-container').append('svg');
+  const defs = svg.append('defs');
 
   // Arrow markers
-  const defs = svg.append('defs');
+  const arrowColors = { causes: '#f38ba8', triggers: '#89b4fa', 'co-occurs': '#a6e3a1' };
   ['causes', 'triggers', 'co-occurs'].forEach(rel => {
     defs.append('marker')
       .attr('id', `arrow-${rel}`)
       .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 22).attr('refY', 0)
+      .attr('refX', 24).attr('refY', 0)
       .attr('markerWidth', 6).attr('markerHeight', 6)
       .attr('orient', 'auto')
       .append('path')
         .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', rel === 'causes' ? '#f38ba8' : rel === 'triggers' ? '#89b4fa' : '#a6e3a1');
+        .attr('fill', arrowColors[rel]);
   });
 
   const g = svg.append('g');
-
   svg.call(
-    d3.zoom().scaleExtent([0.2, 4])
+    d3.zoom().scaleExtent([0.15, 5])
       .on('zoom', e => g.attr('transform', e.transform))
   );
 
   const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(160))
-    .force('charge', d3.forceManyBody().strength(-400))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide(40));
+    .force('link',      d3.forceLink(links).id(d => d.id).distance(180))
+    .force('charge',    d3.forceManyBody().strength(-500))
+    .force('center',    d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide(48));
 
   const link = g.append('g').selectAll('path')
     .data(links).enter().append('path')
     .attr('class', d => `link ${d.relation}`)
-    .attr('stroke-width', d => 1 + (d.weight / maxWeight) * 4)
+    .attr('stroke-width', d => 1.2 + (d.weight / maxWeight) * 3.5)
     .attr('marker-end', d => `url(#arrow-${d.relation})`)
     .on('mouseover', (e, d) => {
       tooltip.style.display = 'block';
-      tooltip.innerHTML = `<b>${d.relation}</b>${d.label ? `<br>${d.label}` : ''}<br>weight: ${d.weight || 1}`;
+      tooltip.innerHTML =
+        `<b>${relLabels[d.relation] || d.relation}</b>` +
+        (d.label ? `<br><span class="tkey">描述：</span>${d.label}` : '') +
+        `<br><span class="tkey">权重：</span>${d.weight || 1}`;
     })
     .on('mousemove', e => {
       tooltip.style.left = (e.clientX + 14) + 'px';
@@ -151,7 +791,10 @@ function renderGraph(data) {
     )
     .on('mouseover', (e, d) => {
       tooltip.style.display = 'block';
-      tooltip.innerHTML = `<b>${d.label}</b><br>type: ${d.type}<br>verified: ${d.verified}`;
+      tooltip.innerHTML =
+        `<b>${d.label}</b>` +
+        `<br><span class="tkey">类型：</span>${typeLabels[d.type] || d.type}` +
+        `<br><span class="tkey">已验证：</span>${d.verified ? '是' : '否'}`;
     })
     .on('mousemove', e => {
       tooltip.style.left = (e.clientX + 14) + 'px';
@@ -159,36 +802,43 @@ function renderGraph(data) {
     })
     .on('mouseout', () => tooltip.style.display = 'none');
 
-  node.append('circle').attr('r', 18);
+  node.append('circle').attr('r', 20);
+
+  // Multi-line text wrapping helper
   node.append('text')
-    .attr('dy', 30)
+    .attr('dy', 34)
     .attr('text-anchor', 'middle')
-    .text(d => d.label.length > 30 ? d.label.slice(0, 28) + '…' : d.label);
+    .each(function(d) {
+      const el   = d3.select(this);
+      const maxCh = 10;
+      const label = d.label || '';
+      if (label.length <= maxCh) {
+        el.text(label);
+      } else {
+        // Split into two lines
+        const mid = Math.ceil(label.length / 2);
+        el.append('tspan').attr('x', 0).attr('dy', 0).text(label.slice(0, mid));
+        el.append('tspan').attr('x', 0).attr('dy', '1.2em').text(label.slice(mid));
+      }
+    });
 
   simulation.on('tick', () => {
     link.attr('d', d => {
       const dx = d.target.x - d.source.x;
       const dy = d.target.y - d.source.y;
-      const dr = Math.sqrt(dx * dx + dy * dy) * 1.5;
+      const dr = Math.sqrt(dx * dx + dy * dy) * 1.4;
       return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
     });
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
 }
 
-document.getElementById('file-input').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = evt => {
-    try {
-      renderGraph(JSON.parse(evt.target.result));
-    } catch (err) {
-      alert('Failed to parse JSON: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-});
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+
+loadConfig();
+loadGraphList();
 </script>
 </body>
 </html>

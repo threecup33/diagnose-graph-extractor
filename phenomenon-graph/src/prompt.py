@@ -70,6 +70,15 @@ Rules:
 - Do not duplicate nodes; merge synonymous concepts into a single node.
 - Omit "label" on edges when it adds no information beyond the relation type.
 - "verified" should be true only when the post explicitly confirms the hypothesis was validated.
+
+## Output Language
+
+Write ALL natural-language text fields in Simplified Chinese (简体中文):
+- "symptom" field
+- every node "label"
+- every edge "label" (if present)
+
+Node "id" fields must remain short English snake_case identifiers.
 """
 
 USER_PROMPT_TEMPLATE = """\
